@@ -3,123 +3,288 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>背景音乐播放器 - 向天再借五百年</title>
+    <title>向天再借五百年 - 背景音乐自动播放</title>
     <style>
-        /* 精简优化后的CSS */
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            background: linear-gradient(135deg, #1a2a6c, #b21f1f);
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Microsoft YaHei', sans-serif;
+        }
+        body {
+            background: linear-gradient(135deg, #1a2a6c 0%, #b21f1f 50%, #1a2a6c 100%);
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
-            font-family: 'Microsoft YaHei', sans-serif;
+            overflow: hidden;
+            position: relative;
         }
-        .player-container {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            padding: 30px;
+        .container {
             text-align: center;
-            max-width: 500px;
-            width: 90%;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            z-index: 10;
+            padding: 20px;
+            max-width: 90%;
         }
         h1 {
             color: white;
-            font-size: 2rem;
-            margin-bottom: 10px;
-            text-shadow: 0 2px 5px rgba(0,0,0,0.5);
+            font-size: 2.5rem;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+            margin-bottom: 20px;
+            background: linear-gradient(to right, #ff8a00, #da1b60);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
-        .auto-play-btn {
-            background: #ff8a00;
+        .btn {
+            background: linear-gradient(to right, #ff8a00, #da1b60);
             color: white;
             border: none;
             padding: 15px 40px;
             font-size: 1.2rem;
             border-radius: 50px;
             cursor: pointer;
-            margin-top: 20px;
             transition: all 0.3s;
-            box-shadow: 0 5px 15px rgba(255,138,0,0.4);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            margin: 10px;
+            min-width: 200px;
         }
-        .auto-play-btn:hover {
+        .btn:hover {
             transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(255,138,0,0.6);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+        }
+        .visualizer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 150px;
+            z-index: 1;
         }
         .status {
-            color: rgba(255, 255, 255, 0.8);
-            margin: 15px 0;
-            min-height: 24px;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 1.1rem;
+            margin: 20px 0;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+        }
+        .hidden {
+            display: none;
+        }
+        /* 动画背景元素 */
+        .particle {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            animation: float 15s infinite linear;
+            z-index: 0;
+        }
+        @keyframes float {
+            0% { transform: translateY(0) rotate(0deg); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translateY(-100vh) rotate(360deg); opacity: 0; }
         }
     </style>
 </head>
 <body>
-    <div class="player-container">
+    <!-- 音频播放器 (隐藏) -->
+    <audio id="audioPlayer" loop>
+        <source src="./xingtian500years.MP3" type="audio/mpeg">
+    </audio>
+    
+    <!-- 主界面 -->
+    <div class="container">
         <h1>向天再借五百年</h1>
-        <p class="status" id="statusText">准备播放中...</p>
+        <p class="status" id="statusText">正在初始化播放器...</p>
         
-        <audio id="audioPlayer" style="display:none">
-            <source src="./xingtian500years.MP3" type="audio/mpeg">
-        </audio>
+        <!-- 主播放按钮 -->
+        <button class="btn" id="mainPlayBtn">▶ 启动背景音乐</button>
         
-        <button class="auto-play-btn" id="playButton">▶ 点击播放音乐</button>
+        <!-- 音量控制 -->
+        <div id="volumeControl" class="hidden">
+            <button class="btn" id="volumeDown">🔉 减小音量</button>
+            <button class="btn" id="volumeUp">🔊 增大音量</button>
+        </div>
     </div>
-
+    
+    <!-- 音频可视化 -->
+    <canvas id="visualizer" class="visualizer"></canvas>
+    
     <script>
-        // 核心自动播放技术
+        // ====== 核心音频引擎 ======
         const audio = document.getElementById('audioPlayer');
-        const playButton = document.getElementById('playButton');
         const statusText = document.getElementById('statusText');
+        const mainPlayBtn = document.getElementById('mainPlayBtn');
+        const volumeControl = document.getElementById('volumeControl');
+        const volumeDownBtn = document.getElementById('volumeDown');
+        const volumeUpBtn = document.getElementById('volumeUp');
+        const canvas = document.getElementById('visualizer');
+        const ctx = canvas.getContext('2d');
         
-        // 解决iOS自动播放限制
-        audio.setAttribute('playsinline', '');
-        audio.setAttribute('webkit-playsinline', '');
+        // 音频分析器
+        let audioContext, analyser, dataArray;
         
-        // 首次交互后解锁音频
-        function unlockAudio() {
+        // 创建动画背景粒子
+        function createParticles() {
+            for (let i = 0; i < 20; i++) {
+                const particle = document.createElement('div');
+                particle.classList.add('particle');
+                
+                // 随机属性
+                const size = Math.random() * 100 + 50;
+                const posX = Math.random() * 100;
+                const delay = Math.random() * 15;
+                const duration = 15 + Math.random() * 10;
+                
+                particle.style.width = `${size}px`;
+                particle.style.height = `${size}px`;
+                particle.style.left = `${posX}%`;
+                particle.style.animationDelay = `${delay}s`;
+                particle.style.animationDuration = `${duration}s`;
+                
+                document.body.appendChild(particle);
+            }
+        }
+        
+        // 初始化音频分析器
+        function initAudioAnalyser() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioContext.createAnalyser();
+            const source = audioContext.createMediaElementSource(audio);
+            
+            source.connect(analyser);
+            analyser.connect(audioContext.destination);
+            
+            analyser.fftSize = 256;
+            const bufferLength = analyser.frequencyBinCount;
+            dataArray = new Uint8Array(bufferLength);
+            
+            // 设置canvas尺寸
+            canvas.width = window.innerWidth;
+            canvas.height = 150;
+        }
+        
+        // 音频可视化
+        function visualize() {
+            if (!analyser) return;
+            
+            requestAnimationFrame(visualize);
+            
+            analyser.getByteFrequencyData(dataArray);
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            const barWidth = (canvas.width / dataArray.length) * 2.5;
+            let barHeight;
+            let x = 0;
+            
+            ctx.fillStyle = 'rgba(255, 138, 0, 0.8)';
+            
+            for (let i = 0; i < dataArray.length; i++) {
+                barHeight = dataArray[i] * 1.5;
+                
+                ctx.fillRect(
+                    x,
+                    canvas.height - barHeight,
+                    barWidth,
+                    barHeight
+                );
+                
+                x += barWidth + 1;
+            }
+        }
+        
+        // ====== 自动播放引擎 ======
+        function initAudioSystem() {
+            // iOS 特殊处理
+            audio.setAttribute('playsinline', '');
+            audio.setAttribute('webkit-playsinline', '');
+            
             // 尝试自动播放
+            attemptAutoPlay();
+            
+            // 创建动画背景
+            createParticles();
+            
+            // 初始化音频分析器
+            try {
+                initAudioAnalyser();
+                visualize();
+            } catch (e) {
+                console.log('音频分析器初始化失败:', e);
+            }
+        }
+        
+        function attemptAutoPlay() {
+            // 先静音尝试播放以获取权限
+            audio.muted = true;
             const playPromise = audio.play();
             
             if (playPromise !== undefined) {
                 playPromise.then(() => {
-                    // 自动播放成功
-                    statusText.textContent = "正在播放: 向天再借五百年";
-                    playButton.style.display = 'none';
-                    document.body.classList.add('playing');
-                }).catch(error => {
-                    // 自动播放失败时显示按钮
-                    statusText.textContent = "自动播放被阻止: 请点击按钮播放";
-                    playButton.style.display = 'block';
+                    // 成功获取权限后取消静音并真正播放
+                    setTimeout(() => {
+                        audio.muted = false;
+                        audio.pause();
+                        audio.currentTime = 0;
+                        
+                        // 延迟后再次尝试播放
+                        setTimeout(() => {
+                            audio.play().then(() => {
+                                statusText.textContent = "正在播放: 向天再借五百年";
+                                mainPlayBtn.textContent = "⏸ 暂停音乐";
+                                volumeControl.classList.remove('hidden');
+                            }).catch(e => {
+                                statusText.textContent = "自动播放被阻止: 请点击播放按钮";
+                                mainPlayBtn.classList.remove('hidden');
+                            });
+                        }, 500);
+                    }, 300);
+                }).catch(e => {
+                    statusText.textContent = "自动播放被阻止: 请点击播放按钮";
+                    mainPlayBtn.classList.remove('hidden');
                 });
             }
         }
         
-        // 页面加载后尝试自动播放（带延迟）
-        window.addEventListener('load', () => {
-            // 设置3秒后尝试自动播放
-            setTimeout(unlockAudio, 3000);
-            
-            // 添加触摸/点击事件监听
-            document.body.addEventListener('click', () => {
-                unlockAudio();
-            });
+        // ====== 事件监听 ======
+        mainPlayBtn.addEventListener('click', () => {
+            if (audio.paused) {
+                audio.play().then(() => {
+                    statusText.textContent = "正在播放: 向天再借五百年";
+                    mainPlayBtn.textContent = "⏸ 暂停音乐";
+                    volumeControl.classList.remove('hidden');
+                });
+            } else {
+                audio.pause();
+                statusText.textContent = "音乐已暂停";
+                mainPlayBtn.textContent = "▶ 继续播放";
+            }
         });
         
-        // 按钮点击播放
-        playButton.addEventListener('click', unlockAudio);
-        
-        // 自动隐藏按钮（当音频成功播放时）
-        audio.addEventListener('play', () => {
-            playButton.style.display = 'none';
-            statusText.textContent = "正在播放: 向天再借五百年";
+        volumeDownBtn.addEventListener('click', () => {
+            if (audio.volume > 0.1) {
+                audio.volume -= 0.1;
+            }
         });
         
-        // 显示加载进度
-        audio.addEventListener('progress', () => {
-            if (audio.buffered.length > 0) {
-                const percent = (audio.buffered.end(0) / audio.duration * 100).toFixed(1);
-                statusText.textContent = `加载中: ${percent}%`;
+        volumeUpBtn.addEventListener('click', () => {
+            if (audio.volume < 1) {
+                audio.volume += 0.1;
+            }
+        });
+        
+        // 页面加载后初始化
+        window.addEventListener('load', initAudioSystem);
+        
+        // 触摸/点击屏幕任意位置尝试播放
+        document.body.addEventListener('click', () => {
+            if (audio.paused) {
+                audio.play().then(() => {
+                    statusText.textContent = "正在播放: 向天再借五百年";
+                    mainPlayBtn.textContent = "⏸ 暂停音乐";
+                    volumeControl.classList.remove('hidden');
+                });
             }
         });
     </script>
