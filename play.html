@@ -5,166 +5,122 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>背景音乐播放器 - 向天再借五百年</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Microsoft YaHei', sans-serif;
-        }
-        body {
-            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
+        /* 精简优化后的CSS */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f);
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
-            padding: 20px;
+            font-family: 'Microsoft YaHei', sans-serif;
         }
         .player-container {
             background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(10px);
             border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-            width: 100%;
-            max-width: 500px;
             padding: 30px;
             text-align: center;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
         }
         h1 {
-            color: #fff;
-            font-size: 2.5rem;
-            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+            color: white;
+            font-size: 2rem;
             margin-bottom: 10px;
-            background: linear-gradient(to right, #ff8a00, #da1b60);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        .subtitle {
-            color: rgba(255, 255, 255, 0.8);
-            font-size: 1.2rem;
-            margin-bottom: 30px;
-        }
-        .album-art {
-            width: 250px;
-            height: 250px;
-            margin: 0 auto 30px;
-            border-radius: 50%;
-            background: linear-gradient(45deg, #0f2027, #203a43, #2c5364);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
-            overflow: hidden;
-            border: 5px solid rgba(255, 255, 255, 0.1);
-            animation: rotate 20s linear infinite;
-        }
-        @keyframes rotate {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .album-art::before {
-            content: "♫";
-            font-size: 5rem;
-            color: rgba(255, 255, 255, 0.2);
-        }
-        audio {
-            width: 100%;
-            margin-bottom: 30px;
-            filter: drop-shadow(0 5px 15px rgba(0, 0, 0, 0.3));
-        }
-        audio::-webkit-media-controls-panel {
-            background: rgba(0, 0, 0, 0.5);
-            border-radius: 10px;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.5);
         }
         .auto-play-btn {
-            background: linear-gradient(to right, #ff8a00, #da1b60);
+            background: #ff8a00;
             color: white;
             border: none;
             padding: 15px 40px;
             font-size: 1.2rem;
             border-radius: 50px;
             cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 5px 15px rgba(218, 27, 96, 0.4);
+            margin-top: 20px;
+            transition: all 0.3s;
+            box-shadow: 0 5px 15px rgba(255,138,0,0.4);
         }
         .auto-play-btn:hover {
             transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(218, 27, 96, 0.6);
+            box-shadow: 0 8px 20px rgba(255,138,0,0.6);
         }
-        .footer {
-            color: rgba(255, 255, 255, 0.6);
-            margin-top: 30px;
-            font-size: 0.9rem;
+        .status {
+            color: rgba(255, 255, 255, 0.8);
+            margin: 15px 0;
+            min-height: 24px;
         }
     </style>
 </head>
 <body>
     <div class="player-container">
         <h1>向天再借五百年</h1>
-        <p class="subtitle">演唱：韩磊 | 影视原声</p>
+        <p class="status" id="statusText">准备播放中...</p>
         
-        <div class="album-art"></div>
-        
-        <audio id="audioPlayer" controls>
+        <audio id="audioPlayer" style="display:none">
             <source src="./xingtian500years.MP3" type="audio/mpeg">
-            您的浏览器不支持音频播放
         </audio>
         
-        <button class="auto-play-btn" id="playButton">自动播放音乐</button>
-        
-        <p class="footer">音乐加载中... 请稍候</p>
+        <button class="auto-play-btn" id="playButton">▶ 点击播放音乐</button>
     </div>
 
     <script>
-        // 自动播放功能
+        // 核心自动播放技术
         const audio = document.getElementById('audioPlayer');
         const playButton = document.getElementById('playButton');
-        const footer = document.querySelector('.footer');
+        const statusText = document.getElementById('statusText');
         
-        // 设置音频源（确保文件名完全匹配）
-        audio.src = './xingtian500years.MP3';
+        // 解决iOS自动播放限制
+        audio.setAttribute('playsinline', '');
+        audio.setAttribute('webkit-playsinline', '');
         
-        // 显示加载状态
-        footer.textContent = '正在加载音乐...';
-        
-        // 自动播放逻辑
-        let autoPlayAttempted = false;
-        
-        function attemptAutoPlay() {
-            if (autoPlayAttempted) return;
+        // 首次交互后解锁音频
+        function unlockAudio() {
+            // 尝试自动播放
+            const playPromise = audio.play();
             
-            audio.play().then(() => {
-                footer.textContent = '正在播放: 向天再借五百年';
-                playButton.style.display = 'none';
-            }).catch(error => {
-                footer.textContent = '自动播放被阻止: 请点击上方按钮播放';
-                playButton.style.display = 'block';
-            });
-            
-            autoPlayAttempted = true;
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    // 自动播放成功
+                    statusText.textContent = "正在播放: 向天再借五百年";
+                    playButton.style.display = 'none';
+                    document.body.classList.add('playing');
+                }).catch(error => {
+                    // 自动播放失败时显示按钮
+                    statusText.textContent = "自动播放被阻止: 请点击按钮播放";
+                    playButton.style.display = 'block';
+                });
+            }
         }
         
-        // 页面加载后尝试自动播放
+        // 页面加载后尝试自动播放（带延迟）
         window.addEventListener('load', () => {
-            setTimeout(attemptAutoPlay, 1000);
+            // 设置3秒后尝试自动播放
+            setTimeout(unlockAudio, 3000);
+            
+            // 添加触摸/点击事件监听
+            document.body.addEventListener('click', () => {
+                unlockAudio();
+            });
         });
         
         // 按钮点击播放
-        playButton.addEventListener('click', () => {
-            audio.play();
-            footer.textContent = '正在播放: 向天再借五百年';
-            playButton.style.display = 'none';
-        });
+        playButton.addEventListener('click', unlockAudio);
         
-        // 显示文件加载进度
-        audio.addEventListener('progress', () => {
-            const percent = (audio.buffered.end(0) / audio.duration * 100 || 0).toFixed(1);
-            footer.textContent = `加载中: ${percent}% 已完成`;
-        });
-        
-        // 音乐开始播放时更新状态
+        // 自动隐藏按钮（当音频成功播放时）
         audio.addEventListener('play', () => {
-            footer.textContent = '正在播放: 向天再借五百年';
+            playButton.style.display = 'none';
+            statusText.textContent = "正在播放: 向天再借五百年";
+        });
+        
+        // 显示加载进度
+        audio.addEventListener('progress', () => {
+            if (audio.buffered.length > 0) {
+                const percent = (audio.buffered.end(0) / audio.duration * 100).toFixed(1);
+                statusText.textContent = `加载中: ${percent}%`;
+            }
         });
     </script>
 </body>
